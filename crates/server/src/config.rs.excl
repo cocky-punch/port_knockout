@@ -1,0 +1,20 @@
+use serde::Deserialize;
+use std::{fs, net::SocketAddr};
+
+#[derive(Debug, Deserialize)]
+pub struct Config {
+    pub bind_address_ipv4: SocketAddr,
+    pub bind_address_ipv6: SocketAddr,
+    pub devices: Vec<Device>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Device {
+    pub id: String,
+    pub secret: String,
+}
+
+pub fn load() -> Result<Config, Box<dyn std::error::Error>> {
+    let contents = fs::read_to_string("config.toml")?;
+    Ok(toml::from_str(&contents)?)
+}

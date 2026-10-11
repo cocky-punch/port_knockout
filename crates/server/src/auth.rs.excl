@@ -1,0 +1,185 @@
+use crate::{
+    config::{Config, Device},
+    protocol::{Authenticate, Challenge, HelloMessage},
+};
+use hmac::{Hmac, KeyInit, Mac};
+use rand::{Rng, RngExt};
+use sha2::Sha256;
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::{LazyLock, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+type HmacSha256 = Hmac<Sha256>;
+
+const MAX_CLOCK_SKEW: u64 = 30;
+const CHALLENGE_TIMEOUT: u64 = 10;
+const MAX_PENDING_CHALLENGES: usize = 1024;
+
+struct PendingChallenge {
+    server_nonce: [u8; 32],
+    profile: crate::protocol::Profile,
+    source_addr: SocketAddr,
+    expires_at: u64,
+}
+
+static PENDING_CHALLENGES: LazyLock<Mutex<HashMap<(String, [u8; 16]), PendingChallenge>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+pub async fn handle_hello_message(
+    config: &Config,
+    hello_message: &HelloMessage,
+    source_addr: SocketAddr,
+) -> Result<Challenge, AuthError> {
+    let device = find_device(config, &hello_message.device_id).ok_or(AuthError::UnknownDevice)?;
+
+    let now = current_timestamp()?;
+
+    validate_timestamp(hello_message.timestamp, now)?;
+    validate_hello_message_mac(device, hello_message)?;
+
+    let mut server_nonce = [0u8; 32];
+    rand::rng().fill(&mut server_nonce);
+
+    let expires_at = now + CHALLENGE_TIMEOUT;
+    let key = (hello_message.device_id.clone(), hello_message.client_nonce);
+
+    let pending_challenge = PendingChallenge {
+        server_nonce,
+        profile: hello_message.profile,
+        source_addr,
+        expires_at,
+    };
+
+    let mut pending_challenges = PENDING_CHALLENGES.lock().unwrap();
+    pending_challenges.retain(|_, challenge| challenge.expires_at > now);
+
+    if pending_challenges.len() >= MAX_PENDING_CHALLENGES {
+        return Err(AuthError::TooManyPendingChallenges);
+    }
+
+    pending_challenges.insert(key, pending_challenge);
+
+    Ok(Challenge {
+        client_nonce: hello_message.client_nonce,
+        server_nonce,
+    })
+}
+
+pub async fn handle_authenticate(
+    config: &Config,
+    authenticate: &Authenticate,
+    source_addr: SocketAddr,
+) -> Result<(), AuthError> {
+    let device = find_device(config, &authenticate.device_id).ok_or(AuthError::UnknownDevice)?;
+
+    let now = current_timestamp()?;
+    validate_timestamp(authenticate.timestamp, now)?;
+    let key = (authenticate.device_id.clone(), authenticate.client_nonce);
+    let pending_challenge = {
+        let mut pending_challenges = PENDING_CHALLENGES.lock().unwrap();
+        pending_challenges.retain(|_, challenge| challenge.expires_at > now);
+        pending_challenges
+            .remove(&key)
+            .ok_or(AuthError::UnknownChallenge)?
+    };
+
+    if pending_challenge.source_addr != source_addr {
+        return Err(AuthError::SourceAddressMismatch);
+    }
+
+    if pending_challenge.profile as u8 != authenticate.profile as u8 {
+        return Err(AuthError::ProfileMismatch);
+    }
+
+    if pending_challenge.expires_at < now {
+        return Err(AuthError::ChallengeExpired);
+    }
+
+    validate_authenticate_mac(device, authenticate)?;
+
+    println!(
+        "authenticated device {} from {} for {:?}",
+        authenticate.device_id,
+        source_addr.ip(),
+        authenticate.profile
+    );
+
+    Ok(())
+}
+
+fn find_device<'a>(config: &'a Config, device_id: &str) -> Option<&'a Device> {
+    config.devices.iter().find(|device| device.id == device_id)
+}
+
+fn current_timestamp() -> Result<u64, AuthError> {
+    Ok(SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| AuthError::SystemTime)?
+        .as_secs())
+}
+
+fn validate_timestamp(timestamp: u64, now: u64) -> Result<(), AuthError> {
+    if now.abs_diff(timestamp) > MAX_CLOCK_SKEW {
+        return Err(AuthError::TimestampExpired);
+    }
+
+    Ok(())
+}
+
+fn validate_hello_message_mac(
+    device: &Device,
+    hello_message: &HelloMessage,
+) -> Result<(), AuthError> {
+    let secret = hex::decode(&device.secret).map_err(|_| AuthError::InvalidSecret)?;
+    let mut mac = HmacSha256::new_from_slice(&secret).map_err(|_| AuthError::InvalidSecret)?;
+    mac.update(&hello_message.authentication_bytes());
+    mac.verify_slice(&hello_message.mac)
+        .map_err(|_| AuthError::InvalidMac)
+}
+
+fn validate_authenticate_mac(
+    device: &Device,
+    authenticate: &Authenticate,
+) -> Result<(), AuthError> {
+    let secret = hex::decode(&device.secret).map_err(|_| AuthError::InvalidSecret)?;
+    let mut mac = HmacSha256::new_from_slice(&secret).map_err(|_| AuthError::InvalidSecret)?;
+    mac.update(&authenticate.authentication_bytes());
+    mac.verify_slice(&authenticate.mac)
+        .map_err(|_| AuthError::InvalidMac)
+}
+
+#[derive(Debug)]
+pub enum AuthError {
+    UnknownDevice,
+    InvalidSecret,
+    InvalidMac,
+    TimestampExpired,
+    UnknownChallenge,
+    ChallengeExpired,
+    SourceAddressMismatch,
+    ProfileMismatch,
+    TooManyPendingChallenges,
+    SystemTime,
+}
+
+impl std::fmt::Display for AuthError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownDevice => write!(formatter, "unknown device"),
+            Self::InvalidSecret => write!(formatter, "invalid device secret"),
+            Self::InvalidMac => write!(formatter, "invalid MAC"),
+            Self::TimestampExpired => write!(formatter, "timestamp expired"),
+            Self::UnknownChallenge => write!(formatter, "unknown challenge"),
+            Self::ChallengeExpired => write!(formatter, "challenge expired"),
+            Self::SourceAddressMismatch => write!(formatter, "source address mismatch"),
+            Self::ProfileMismatch => write!(formatter, "profile mismatch"),
+            Self::TooManyPendingChallenges => write!(formatter, "too many pending challenges"),
+            Self::SystemTime => write!(formatter, "system time error"),
+        }
+    }
+}
+
+impl std::error::Error for AuthError {}

@@ -1,0 +1,23 @@
+[workspace]
+members = [
+    "crates/protocol",
+    "crates/server",
+    "crates/client",
+]
+resolver = "3"
+
+
+# [package]
+# name = "port_knockout"
+# version = "0.1.0"
+# edition = "2024"
+#
+# [dependencies]
+# hex = "0.4.3"
+# hmac = "0.13.0"
+# rand = "0.10.3"
+# serde = { version = "1.0.229", features = ["derive"] }
+# sha2 = "0.11.0"
+# tokio = { version = "1.53.2", features = ["macros", "net", "rt-multi-thread", "time"] }
+# toml = "1.1.6"
+#

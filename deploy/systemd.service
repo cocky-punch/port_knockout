@@ -1,0 +1,17 @@
+[Unit]
+Description=daemon that grants temporary access to the certain OS ports
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/??
+Restart=on-failure
+RestartSec=2
+User=??
+Group=??
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+
+[Install]
+WantedBy=multi-user.target
