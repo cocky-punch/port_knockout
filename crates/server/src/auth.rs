@@ -5,13 +5,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::{
-    config::{Config, Device},
-    protocol::{Request, RequestKind, Response, ResponseStatus},
-};
+use crate::config::{Config, Device};
+use port_knockout_protocol::{Request, RequestKind, Response, ResponseStatus};
 
 type HmacSha256 = Hmac<Sha256>;
-
 const MAX_TIMESTAMP_SKEW_SECONDS: u64 = 30;
 
 pub fn handle_request(

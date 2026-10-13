@@ -1,8 +1,8 @@
 use std::env;
 use std::net::SocketAddr;
 // use std::os::unix::net::SocketAddr;
-use std::time::Duration;
 use std::net::UdpSocket;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

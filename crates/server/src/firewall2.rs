@@ -1,11 +1,7 @@
-use std::{
-    error::Error,
-    net::IpAddr,
-    process::Output,
-};
+use std::{error::Error, net::IpAddr, process::Output};
 
-use tokio::process::Command;
 use crate::config::{PortRule, TransportProtocol};
+use tokio::process::Command;
 
 const TABLE: &str = "filter";
 const INPUT_CHAIN: &str = "input";
@@ -20,10 +16,9 @@ pub async fn init(ports: &[PortRule]) -> FirewallResult<()> {
         .await
         .is_err()
     {
-        return Err(format!(
-            "required nftables chain inet {TABLE} {INPUT_CHAIN} does not exist"
-        )
-        .into());
+        return Err(
+            format!("required nftables chain inet {TABLE} {INPUT_CHAIN} does not exist").into(),
+        );
     }
 
     if nft(&["list", "chain", "inet", TABLE, ACCESS_CHAIN])
@@ -38,19 +33,14 @@ pub async fn init(ports: &[PortRule]) -> FirewallResult<()> {
             let set = set_name(rule, ipv6);
             let address_type = if ipv6 { "ipv6_addr" } else { "ipv4_addr" };
 
-            if nft(&["list", "set", "inet", TABLE, &set])
-                .await
-                .is_err()
-            {
+            if nft(&["list", "set", "inet", TABLE, &set]).await.is_err() {
                 nft(&[
                     "add",
                     "set",
                     "inet",
                     TABLE,
                     &set,
-                    &format!(
-                        "{{ type {address_type}; flags timeout; timeout 5m; }}"
-                    ),
+                    &format!("{{ type {address_type}; flags timeout; timeout 5m; }}"),
                 ])
                 .await?;
             }
@@ -106,11 +96,7 @@ pub async fn init(ports: &[PortRule]) -> FirewallResult<()> {
     Ok(())
 }
 
-pub async fn open(
-    source_ip: IpAddr,
-    ports: &[PortRule],
-    lease_seconds: u32,
-) -> FirewallResult<()> {
+pub async fn open(source_ip: IpAddr, ports: &[PortRule], lease_seconds: u32) -> FirewallResult<()> {
     if lease_seconds == 0 {
         return Err("lease duration must be greater than zero".into());
     }
@@ -118,40 +104,19 @@ pub async fn open(
     for rule in ports {
         let set = set_name(rule, source_ip.is_ipv6());
         let address = source_ip.to_string();
-        let element = format!(
-            "{{ {address} timeout {lease_seconds}s }}"
-        );
+        let element = format!("{{ {address} timeout {lease_seconds}s }}");
 
-        let replace = nft(&[
-            "replace",
-            "element",
-            "inet",
-            TABLE,
-            &set,
-            &element,
-        ])
-        .await;
+        let replace = nft(&["replace", "element", "inet", TABLE, &set, &element]).await;
 
         if replace.is_err() {
-            nft(&[
-                "add",
-                "element",
-                "inet",
-                TABLE,
-                &set,
-                &element,
-            ])
-            .await?;
+            nft(&["add", "element", "inet", TABLE, &set, &element]).await?;
         }
     }
 
     Ok(())
 }
 
-pub async fn close(
-    source_ip: IpAddr,
-    ports: &[PortRule],
-) -> FirewallResult<()> {
+pub async fn close(source_ip: IpAddr, ports: &[PortRule]) -> FirewallResult<()> {
     let address = source_ip.to_string();
 
     for rule in ports {
@@ -159,24 +124,15 @@ pub async fn close(
         let element = format!("{{ {address} }}");
 
         let output = Command::new("nft")
-            .args([
-                "delete",
-                "element",
-                "inet",
-                TABLE,
-                &set,
-                &element,
-            ])
+            .args(["delete", "element", "inet", TABLE, &set, &element])
             .output()
             .await?;
 
         // Deleting a missing element is harmless.
         // Other failures should be reported.
         if !output.status.success()
-            && !String::from_utf8_lossy(&output.stderr)
-                .contains("No such file or directory")
-            && !String::from_utf8_lossy(&output.stderr)
-                .contains("No such element")
+            && !String::from_utf8_lossy(&output.stderr).contains("No such file or directory")
+            && !String::from_utf8_lossy(&output.stderr).contains("No such element")
         {
             return Err(format!(
                 "nft delete element failed: {}",

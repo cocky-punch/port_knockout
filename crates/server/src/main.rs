@@ -5,14 +5,15 @@ mod config;
 // mod protocol;
 mod firewall2;
 
-use crate::protocol;
+// use crate::protocol;
+use port_knockout_protocol::{Request, RequestKind, Response, ResponseStatus};
 
 const APP_NAME: &str = "port_knockout";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = config::load()?;
-    firewall2::init(&config.ports).await?;
+    firewall2::init(&config.ports);
 
     let ipv4_socket = UdpSocket::bind(config.bind_address_ipv4).await?;
     let ipv6_socket = UdpSocket::bind(config.bind_address_ipv6).await?;
@@ -38,7 +39,7 @@ async fn receive_loop(
         let (length, source_addr) = socket.recv_from(&mut buffer).await?;
         let packet = &buffer[..length];
 
-        let request = match protocol::Request::from_bytes(packet) {
+        let request = match port_knockout_protocol::Request::from_bytes(packet) {
             Ok(request) => request,
             Err(error) => {
                 eprintln!("invalid packet from {source_addr}: {error}");
