@@ -4,8 +4,6 @@ mod auth;
 mod config;
 // mod protocol;
 mod firewall2;
-
-// use crate::protocol;
 use port_knockout_protocol::{Request, RequestKind, Response, ResponseStatus};
 
 const APP_NAME: &str = "port_knockout";
