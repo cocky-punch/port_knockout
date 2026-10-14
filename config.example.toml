@@ -1,23 +1,23 @@
 bind_address_ipv4 = "0.0.0.0:34781"
 bind_address_ipv6 = "[::]:34781"
-server_secret = "ck4yNTL7WUParXusQpPcRgxKnR62S7Qvn64NrEUxPNblO3N9CzUda97uWJTGqYt1"
+server_secret = "TODO"
 lease_in_seconds = 600
 
 [[devices]]
 id = "desktop-01"
-secret = "K7iQFChIbpqRQJnep7iPk1S9dbg7hO8kQKfEtimasWD1DE0uwghDxN0L28dzapHl"
+secret = "TODO"
 
 [[devices]]
 id = "android-01"
-secret = "yJrMBq7AZlqUT0sK49X04kNcl3FLrHogBQyYmOewSSLk4xSBrgry6nFLEbQb6Rhq"
+secret = "TODO"
 
 [[devices]]
 id = "android-02"
-secret = "P2rXATqs7pw9zipm0kUJLYqzglQkS4ofOE34vTSkHXk2ANGcGHdzrITFk4CFhxB0"
+secret = "TODO"
 
 [[devices]]
 id = "android-03"
-secret = "JUvGapESTgP8gKPufc7r28GQSmf6eDEre9EFTpHxRANYaxhMLXiutdnnDBsdW3tY"
+secret = "TODO"
 
 [[ports]]
 protocol = "udp"
